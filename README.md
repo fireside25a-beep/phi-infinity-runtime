@@ -565,3 +565,27 @@ See:
 
 `docs/validation/EMPIRICAL_REALITY_GATE_ALPHA_2026-08-30.md`
 <!-- PHI:EMPIRICAL_REALITY_ALPHA:END -->
+
+---
+
+## Independent opt-in gate verification and state protection (contribution)
+
+The frozen original numerical equations and the normal **unattached** engine
+behavior are preserved. Optional additions provide a test-only independent
+gate audit, fail-closed predicates, a synchronized guard on the two public
+real effects, supported-state rollback, a fixed-rule versioned access gate,
+and a sealed built-in numerical execution profile.
+
+Review the staged test and engineering evidence before enabling these features:
+
+- [Independent frozen gate audit](docs/validation/INDEPENDENT_GATE_AUDIT.md)
+- [Real-effect support transactions](docs/validation/REAL_EFFECT_SUPPORT_TRANSACTIONS.md)
+- [Engine-owned state transaction](docs/validation/ENGINE_STATE_TRANSACTION_REVIEW.md)
+- [Versioned quorum + enforced software REOPEN](docs/validation/VERSIONED_QUORUM_AND_REOPEN.md)
+- [Sealed opt-in PHI effect profile](docs/validation/SEALED_PHI_PROFILE.md)
+- [Contribution review matrix](docs/validation/CONTRIBUTION_REVIEW_MATRIX.md)
+
+Run the real native example with `python -m examples.versioned_sealed_gate`.
+C11 reference sources and the corresponding Python comparison tests are in
+`verification/c11/` and `tests/`. No physical sensor attestation or proof of
+M is asserted by these software tests.

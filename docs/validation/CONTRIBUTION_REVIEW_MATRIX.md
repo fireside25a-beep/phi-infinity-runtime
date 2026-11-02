@@ -30,3 +30,21 @@ second state transition implementation.
 - Archived C11 tester check totals exercise C11 algorithms, not PHI mechanics.
 
 Nothing in this contribution claims a completed physical implementation of M.
+
+## Added review stages after the original five
+
+| Stage | Source-backed enhancement | Verification | Scope |
+|---|---|---|---|
+| 06 | `EngineStateTransaction` for all supported instance fields; predicate mutation refusal; rollback after native and boundary exceptions | `tests/test_transactional_effects.py` | Opt-in protected effects; unrecognized state refused before mechanics |
+| 07 | `VersionedSupport` and `VersionedQuorumGate`, with no user callback and requiring a newer positive software publication before REOPEN | `tests/test_versioned_quorum_protocol.py` | Local cooperative publication, not a physical attestation |
+| 08 | Sealed native PHI profile rejecting subclass mechanics, custom progress/array hooks, invalid state schema; independent C11 versioned oracle | `tests/test_sealed_phi_effect_profile.py`, `tests/test_c11_versioned_quorum_oracle.py` | Exact built-in engine and typed numeric evidence only |
+| 09 | Staged review documentation and real examples | `python -m examples.versioned_sealed_gate`, all tests | Source comments, application instructions, provenance |
+
+**Changed contract:** Under an attached gate, supported engine-owned numerical
+state is now rolled back on refusal or a failed effect (stage 06). This
+supersedes the earlier row which said errors had no numerical rollback.
+When sealed mode is requested (stage 08), the runtime refuses arbitrary
+acceptance predicates and subclass methods rather than pretending arbitrary
+Python external side effects can be transactionally undone. This also
+supersedes the original report's `trigger_reopen()` limitation *for the new
+versioned gate only*; the original gate retains its original REOPEN semantics.

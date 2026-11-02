@@ -1,50 +1,65 @@
-# MacBook manual fork/PR workflow (no direct access to canonical repo)
+# Manual MacBook pull request procedure — nine independent stages
 
-The source-only ZIP contains `PATCHES_FOR_MAC/`,
-`CUMULATIVE_CHANGED_FILES_ONLY/` and `docs/` for review. The patches are
-**cumulative stages**: each patch expects the previous stage applied, and
-patch 01 expects the exact frozen upstream tree
-`4ee4ea34b5b83cccff3463fec607c7ec0e10cd2a`.
+**Upstream frozen target:** `4ee4ea34b5b83cccff3463fec607c7ec0e10cd2a`.
+Your provided ZIP is the audited source. Its archive SHA-256 is recorded in
+`STAGE_METADATA.json` in the offline release, and the patch application
+must be checked against the *actual Git checkout* before opening any PR.
 
-The build was prepared against the user-provided ZIP named after that SHA,
-not against an authenticated signed Git checkout. Before applying patches,
-confirm the repository checkout really contains the expected starting blobs.
+The maintainer requested a **test-only first PR**. Preserve that boundary:
+stage 01 is tests+report only and deliberately documents the unintegrated
+effect gap. Stages 02–09 are **separate review commits** and may be submitted
+as stacked PRs or follow-up PRs with the maintainer's approval. Do not submit
+all nine as the first PR without prior maintainer agreement.
 
-## On a clean fork checkout
+## Stage order
 
-1. In Terminal, go to your *own fork* clone, not the maintainer's repo.
-2. Confirm `git status --short` is empty and run `git rev-parse HEAD`.
-3. If upstream has not moved, start at the frozen target or maintainer-agreed
-   merge base. Do not overwrite an existing worktree.
-4. Make a new branch based on the frozen ref, **apply only stage 01**, run
-   `python3 -m pytest -q`, commit, push to your fork, and open PR 01.
-5. Once stage 01 is merged, start the next branch based on that merged target
-   and apply stage 02; repeat for stages 03, 04 and 05. If PRs are stacked,
-   make clear each review target is the preceding branch, not the frozen main.
-6. Never apply `CUMULATIVE_CHANGE.patch` on top of individual patches.
+| Patch | Stage scope |
+|---|---|
+| `01_independent_gate_audit.patch` | Independent gate transitions + original real-effect gap evidence (test-only) |
+| `02_predicate_fail_closed.patch` | Error-to-FirstDivergence fail-closed behavior |
+| `03_serialized_real_effect_integration.patch` | Support lock around real native+boundary state effects |
+| `04_independent_c11_oracle.patch` | Independent 5,120-row C11 gate model |
+| `05_review_docs_example.patch` | Original review matrix and runnable demonstration |
+| `06_engine_state_transactions.patch` | Transaction snapshots, callback mutation rejection, mechanics rollback |
+| `07_versioned_quorum_reopen.patch` | Fixed-rule multi-channel support, newer-publication REOPEN |
+| `08_sealed_effect_and_c11_oracle.patch` | Closed native PHI profile + 38,880-row C11 reference model |
+| `09_review_docs_and_example.patch` | Complete examples, reviews, and API/documentation index |
 
-Examples (replace only your local paths and branch names):
+Every patch is generated from one **real local Git commit** against its
+predecessor, with a SHA-256 file in `PATCHES_FOR_MAC`. The cumulative patch
+is an **alternative**, not something to apply on top of the nine stages.
+Do not include the local import commit (`1114592`) in a PR. It was created
+only to represent the user-supplied ZIP and is **not** the public Git SHA.
 
-```sh
-# inside your already-cloned personal fork
- git status --short
- git rev-parse HEAD
- git switch -c alex/phi-gate-audit 4ee4ea34b5b83cccff3463fec607c7ec0e10cd2a
- git apply --check /path/to/PATCHES_FOR_MAC/01_independent_gate_audit.patch
- git apply /path/to/PATCHES_FOR_MAC/01_independent_gate_audit.patch
- python3 -m pytest -q
- git add tests/test_gate_independent_audit.py docs/validation/INDEPENDENT_GATE_AUDIT.md
- git commit -m "test: independent PHI multi-access gate audit"
+## Terminal procedure in your already-cloned personal fork
+
+First, ensure your own fork's local checkout is clean. Installing tools:
+
+```bash
+xcode-select --install                    # only if macOS tools are absent
+python3 -m venv .venv
+. .venv/bin/activate
+python3 -m pip install -r requirements.txt pytest
 ```
 
-For stage 02 onward, use `git apply --check` with the corresponding patch
-before applying, always in order and on the appropriate branch. Review the
-changed files (`git diff --check`, `git diff --stat`) before committing.
+From the folder containing the extracted offline contribution bundle, use
+`MAC_HELPERS/apply_one_stage.sh /absolute/path/to/your/fork 01` to apply only
+stage 01 after confirming the expected frozen base. This helper **does not
+commit, push, open a PR, or change any remote**. It aborts if the working tree
+has changes or if `git apply --check` fails. Review the resulting diff, run
+`python3 -m pytest -q`, and make the manual commit yourself.
 
-macOS needs Python plus NumPy, SciPy, pytest, and Xcode Command Line Tools
-(`xcode-select --install`) for the optional C11 oracle compilation. Create
-a virtual environment if your default Python is managed externally.
-Do not confuse the local archive-import commit with the real upstream SHA.
+The helper expects each next patch against the preceding stage. For stacked
+PRs, target the immediately preceding PR branch. For post-merge PRs, update
+your branch to the reviewed new upstream base and verify patch applicability.
+Upstream changes may require a reviewed rebase; never force a patch if its
+context differs.
 
-The original target owner requested **initially a test-only PR**. Do not
-combine PR 01 with source changes without their agreement.
+C11 models are optional at runtime but required for full independent test
+coverage; Xcode's `clang` satisfies the C11 compiler condition. Without a
+compiler the Python tests explicitly **skip** the native oracle comparisons.
+Do not report skipped C11 checks as passing.
+
+The offline package also provides source-only changed-file copies for manual
+inspection. Those files are **not a substitute** for reviewing/applying the
+Git patches in correct stage order.

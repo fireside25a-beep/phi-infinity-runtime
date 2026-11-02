@@ -60,7 +60,7 @@ to their ungated counterparts on the same host (tested across seeds/progress).
 | External sensor or another process cannot change while effect runs | **NOT PROVIDED** |
 | Python code cannot mutate `engine.S` / call a private helper directly | **NOT PROVIDED** |
 | Reopening proves an independent interval | **NOT PROVIDED** |
-| Mechanical step partial failures roll back all state | **NOT PROVIDED** |
+| Mechanical step partial failures roll back supported engine-owned state | **PROVIDED from optional stage 06**, including predicate mutation refusal and real effect exception recovery |
 | A universal physical claim about M | **NOT CLAIMED** |
 
 The guarded contract is therefore **cooperatively serialized in-process
@@ -84,3 +84,16 @@ smuggling in a new interpretation of admissibility. The decorator is placed
 on the real public effect paths, not on a made-up stand-in wrapper.
 
 Run: `python -m pytest -q tests/test_authorized_real_effects.py`.
+
+
+## Later transaction and closed-rule extensions
+
+The above original stage-03 notes intentionally describe what stage 03 alone
+implemented. A later, separately reviewable **stage 06** adds a supported
+engine-state transaction, closing its previously noted numerical rollback gap.
+A later **stage 07** introduces versioned Boolean channel support and enforced
+new-publication recovery. **Stage 08** introduces the sealed native profile to
+avoid arbitrary Python callbacks and subclass methods within this code path.
+See [state transactions](ENGINE_STATE_TRANSACTION_REVIEW.md),
+[versioned quorum](VERSIONED_QUORUM_AND_REOPEN.md), and
+[sealed profile](SEALED_PHI_PROFILE.md).
