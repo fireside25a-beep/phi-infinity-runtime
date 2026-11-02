@@ -16,6 +16,7 @@ from functools import wraps
 import threading
 
 from src.gating import FirstDivergenceException, MultiAccessGating
+from src.state_transaction import EngineStateTransaction
 
 
 class SynchronizedSupport:
@@ -83,10 +84,12 @@ def attach_gate_to_engine(engine, gate, support):
 
 
 def authorized_effect(func):
-    """Protect the REAL public state-changing call, never a replica/wrapper model.
+    """Serialize, authorize and transact one real public PHI state transition.
 
-    Applied on PhiSubstrateEngine.step and boundary.step_with_boundary. For
-    unguarded engines, calls reach the unchanged original mechanics directly.
+    The opt-in path snapshots every supported engine instance attribute before
+    invoking the caller's predicate. A predicate mutation is rolled back and
+    refused even if the predicate returns True. Mechanics exceptions likewise
+    roll back and lock, rather than leaving a partly committed PHI state.
     """
     @wraps(func)
     def invoke(engine, *args, **kwargs):
@@ -99,19 +102,48 @@ def authorized_effect(func):
                     'System locked in FirstDivergence. REOPEN protocol required.'
                 )
             entered = False
+            txn = None
             try:
                 with binding.support.effect_window() as metrics:
                     entered = True
-                    binding.gate.check_trajectory(metrics, binding.check_index)
+                    # Fail closed if a subclass brings unsupported state. No
+                    # incomplete snapshot can be mistaken for a transaction.
+                    txn = EngineStateTransaction(engine, binding)
+                    try:
+                        binding.gate.check_trajectory(metrics, binding.check_index)
+                    except BaseException:
+                        binding.gate.execution_locked = True
+                        txn.restore()
+                        raise
+                    if binding.gate.execution_locked:
+                        txn.restore()
+                        raise FirstDivergenceException(
+                            '[FIRSTDIVERGENCE] Gate became locked during evaluation.'
+                        )
+                    if not txn.unchanged():
+                        binding.gate.execution_locked = True
+                        txn.restore()
+                        raise FirstDivergenceException(
+                            '[FIRSTDIVERGENCE] Acceptance predicate modified engine state.'
+                        )
                     binding.check_index += 1
-                    # The support lock is held through the ENTIRE real effect.
-                    return func(engine, *args, **kwargs)
-            except Exception as exc:
+                    try:
+                        result = func(engine, *args, **kwargs)
+                    except BaseException:
+                        binding.gate.execution_locked = True
+                        txn.restore()
+                        raise
+                    return result
+            except BaseException as exc:
                 if not entered and not binding.gate.execution_locked:
-                    # Acquisition/copy failures before the check fail closed.
                     binding.gate.execution_locked = True
                     raise FirstDivergenceException(
                         '[FIRSTDIVERGENCE] Could not acquire fresh support evidence.'
+                    ) from exc
+                if txn is None and not binding.gate.execution_locked:
+                    binding.gate.execution_locked = True
+                    raise FirstDivergenceException(
+                        '[FIRSTDIVERGENCE] Engine state cannot be transacted safely.'
                     ) from exc
                 raise
     return invoke
