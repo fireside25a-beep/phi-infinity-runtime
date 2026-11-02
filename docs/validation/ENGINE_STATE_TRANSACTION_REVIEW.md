@@ -72,3 +72,20 @@ numeric arguments, and copied native boundary receipts are accepted.
 Unattached engines retain the exact previously published call paths and
 outputs. This contribution does not modify the physical or theoretical claims
 of PHI-INFINITY / M.
+
+## 2026-11-02 follow-up: byte-exact metadata and alias handling
+
+An independent reviewer reproduced a missing NumPy dtype restoration after
+a callback changed the `S.dtype` byte order. This was independently reproduced
+for native and boundary effects with callback True/False and then corrected.
+The snapshot now uses fixed-width byte records to preserve structured padding
+which `np.copyto` of structured fields can silently omit. Restores dtype
+before shape, restores original strides when possible, and checks exact bytes.
+Original tuple identity is retained when all children are repaired in place.
+Metadata-bearing dtypes, including nested structured-field metadata, are
+rejected as unsupported (as are object arrays). Metadata injected later is
+also detected even though NumPy dtype equality ignores dtype metadata.
+Some destructive ndarray mutations still cannot restore external aliases: the
+engine may be rebound to a safe copy, and this is not an arbitrary-code sandbox.
+See `tests/test_pr3_independent_recovery_byte_audit.py` and
+`docs/validation/PR3_REVIEW_FINDINGS_AND_REOPEN_POLICY.md`.

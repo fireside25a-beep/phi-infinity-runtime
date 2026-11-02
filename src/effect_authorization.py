@@ -196,44 +196,53 @@ def authorized_effect(func):
             try:
                 with binding.support.effect_window() as metrics:
                     entered = True
-                    # Closed profile performs argument/source checks before
-                    # either the gate or actual mechanics execute.
-                    if binding.sealed:
+                    try:
+                        # Closed profile performs argument/source checks before
+                        # either the gate or actual mechanics execute.
+                        if binding.sealed:
+                            try:
+                                args, kwargs = _sealed_arguments(func, engine, args, kwargs)
+                            except BaseException as preflight_error:
+                                binding.gate.execution_locked = True
+                                raise FirstDivergenceException(
+                                    '[FIRSTDIVERGENCE] Sealed effect argument refusal.'
+                                ) from preflight_error
+                        # Fail closed if a subclass brings unsupported state. No
+                        # incomplete snapshot can be mistaken for a transaction.
+                        txn = EngineStateTransaction(engine, binding)
                         try:
-                            args, kwargs = _sealed_arguments(func, engine, args, kwargs)
-                        except BaseException as preflight_error:
+                            binding.gate.check_trajectory(metrics, binding.check_index)
+                        except BaseException:
                             binding.gate.execution_locked = True
+                            txn.restore()
+                            raise
+                        if binding.gate.execution_locked:
+                            txn.restore()
                             raise FirstDivergenceException(
-                                '[FIRSTDIVERGENCE] Sealed effect argument refusal.'
-                            ) from preflight_error
-                    # Fail closed if a subclass brings unsupported state. No
-                    # incomplete snapshot can be mistaken for a transaction.
-                    txn = EngineStateTransaction(engine, binding)
-                    try:
-                        binding.gate.check_trajectory(metrics, binding.check_index)
+                                '[FIRSTDIVERGENCE] Gate became locked during evaluation.'
+                            )
+                        if not txn.unchanged():
+                            binding.gate.execution_locked = True
+                            txn.restore()
+                            raise FirstDivergenceException(
+                                '[FIRSTDIVERGENCE] Acceptance predicate modified engine state.'
+                            )
+                        binding.check_index += 1
+                        try:
+                            result = func(engine, *args, **kwargs)
+                        except BaseException:
+                            binding.gate.execution_locked = True
+                            txn.restore()
+                            raise
+                        return result
                     except BaseException:
-                        binding.gate.execution_locked = True
-                        txn.restore()
+                        # Record the refused revision BEFORE releasing the
+                        # publication lock, even for native execution errors.
+                        # Other (callback) gate semantics remain unchanged.
+                        from src.versioned_support import VersionedQuorumGate
+                        if isinstance(binding.gate, VersionedQuorumGate):
+                            binding.gate._record_execution_refusal()
                         raise
-                    if binding.gate.execution_locked:
-                        txn.restore()
-                        raise FirstDivergenceException(
-                            '[FIRSTDIVERGENCE] Gate became locked during evaluation.'
-                        )
-                    if not txn.unchanged():
-                        binding.gate.execution_locked = True
-                        txn.restore()
-                        raise FirstDivergenceException(
-                            '[FIRSTDIVERGENCE] Acceptance predicate modified engine state.'
-                        )
-                    binding.check_index += 1
-                    try:
-                        result = func(engine, *args, **kwargs)
-                    except BaseException:
-                        binding.gate.execution_locked = True
-                        txn.restore()
-                        raise
-                    return result
             except BaseException as exc:
                 if not entered and not binding.gate.execution_locked:
                     binding.gate.execution_locked = True

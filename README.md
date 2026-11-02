@@ -589,3 +589,25 @@ Run the real native example with `python -m examples.versioned_sealed_gate`.
 C11 reference sources and the corresponding Python comparison tests are in
 `verification/c11/` and `tests/`. No physical sensor attestation or proof of
 M is asserted by these software tests.
+
+---
+
+## Independent contributor follow-up: guarded effects and deterministic REOPEN (2026-11-02)
+
+The optional guard contribution and its independently tested PR #3 follow-up
+are documented in
+[`docs/validation/PR3_REVIEW_FINDINGS_AND_REOPEN_POLICY.md`](docs/validation/PR3_REVIEW_FINDINGS_AND_REOPEN_POLICY.md).
+This local candidate fixes two independently reproduced reviewer defects: array dtype
+restoration after rejected callback mutations, and error-lock recovery for the
+versioned quorum protocol. The transaction now also preserves raw structured
+array padding bytes where supported and rejects metadata-only dtype changes
+that NumPy dtype equality does not detect. Historical text above describes the
+original research baseline; this addendum does not change the governing PHI
+mechanics or imply a GitHub merge.
+
+Run `python3 -m pytest -q -rs` from the repository root. The local audit
+recorded 415/415 passing cases with zero skips, including 235 added regression
+cases and two C11 reference comparators totaling 44,000 decisions. Full
+source and bounded verification remain subject to the limits in the review
+document: no physical evidence authentication, process-global atomicity,
+or general-purpose malicious Python isolation is claimed.

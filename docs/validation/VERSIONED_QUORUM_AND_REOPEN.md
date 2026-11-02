@@ -58,3 +58,18 @@ python3 -m pytest -q tests/test_versioned_quorum_protocol.py tests/test_c11_vers
 The original `MultiAccessGating.trigger_reopen()` is intentionally unchanged
 for compatibility. New verification requirements are **opted into** by
 choosing `VersionedQuorumGate`.
+
+## 2026-11-02 follow-up: execution-error revision recovery
+
+The original stage-07 direct support-withdrawal protocol worked, but it
+failed to mark `rejected_revision` when a **real PHI effect** raised after an
+accepted versioned quorum check. NaN mechanical progress reproduced this in
+all four native/boundary and sealed/unsealed combinations. The authorized
+effect now records any in-window execution refusal under the same source
+publication lock, including preflight and snapshot errors. REOPEN still needs
+a new strictly later publication with all required channels positive. A failed
+source-window acquisition has no trustworthy revision and may instead require
+reconstruction. The original nonversioned gate is unmodified.
+
+The definitive bounded policy, explicit limitations and test evidence are in
+`docs/validation/PR3_REVIEW_FINDINGS_AND_REOPEN_POLICY.md`.

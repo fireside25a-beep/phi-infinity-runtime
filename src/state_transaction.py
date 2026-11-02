@@ -23,6 +23,24 @@ _SCALAR_TYPES = (type(None), bool, int, float, complex, str, bytes)
 _MAX_DEPTH = 24
 
 
+def _dtype_has_metadata(dtype):
+    """Reject metadata anywhere in a NumPy dtype's nested field tree.
+
+    NumPy intentionally ignores ``dtype.metadata`` when comparing dtypes.
+    Equality by itself therefore cannot authenticate a snapshot's dtype.
+    The supported transaction model has NO metadata-bearing dtypes, even
+    those buried in structured fields or subarray element types.
+    """
+    if dtype.metadata is not None:
+        return True
+    if dtype.fields is not None:
+        return any(_dtype_has_metadata(field[0])
+                   for field in dtype.fields.values())
+    if dtype.subdtype is not None:
+        return _dtype_has_metadata(dtype.subdtype[0])
+    return False
+
+
 def _scalar_token(value):
     if type(value) is float:
         return (float, struct.pack('!d', value))
@@ -52,7 +70,18 @@ def _freeze(value, ancestors, depth=0):
     if kind is np.ndarray:
         if value.dtype.hasobject:
             raise UnsupportedStateError('Object arrays cannot be safely snapshotted')
-        return _SnapshotValue('array', value, value.copy(), value.flags.writeable)
+        if _dtype_has_metadata(value.dtype):
+            raise UnsupportedStateError('Arrays with mutable dtype metadata are unsupported')
+        # A normal ndarray.copy() may omit bytes in structured dtype padding.
+        # Copy as raw fixed-width records to preserve every element byte.
+        values = np.empty_like(value, order='K')
+        if value.dtype.itemsize:
+            record_dtype = np.dtype(f'V{value.dtype.itemsize}')
+            np.copyto(values.view(record_dtype), value.view(record_dtype))
+        else:
+            np.copyto(values, value)
+        return _SnapshotValue('array', value, values,
+                              (value.flags.writeable, value.strides))
     if kind not in (list, tuple, dict, set, frozenset):
         raise UnsupportedStateError(f'Unsupported engine state attribute: {kind.__name__}')
     if id(value) in ancestors:
@@ -82,8 +111,10 @@ def _matches(current, frozen):
         return False
     if frozen.kind == 'array':
         original = frozen.content
-        return (current.dtype == original.dtype and current.shape == original.shape
-                and current.flags.writeable == frozen.metadata
+        return (not _dtype_has_metadata(current.dtype)
+                and current.dtype == original.dtype and current.shape == original.shape
+                and current.strides == frozen.metadata[1]
+                and current.flags.writeable == frozen.metadata[0]
                 and current.tobytes() == original.tobytes())
     if frozen.kind in ('list', 'tuple'):
         return (len(current) == len(frozen.content)
@@ -105,22 +136,45 @@ def _restore(frozen):
     if kind == 'array':
         values = frozen.content
         try:
+            # Restore dtype *before* shape: byte-order/field reinterpretation
+            # otherwise corrupts the copy while preserving apparent values.
+            if ref.dtype != values.dtype or _dtype_has_metadata(ref.dtype):
+                ref.dtype = values.dtype
             if ref.shape != values.shape:
                 ref.resize(values.shape, refcheck=True)
+            if ref.strides != frozen.metadata[1]:
+                ref.strides = frozen.metadata[1]
             if not ref.flags.writeable:
                 ref.setflags(write=True)
-            np.copyto(ref, values)
-            ref.setflags(write=frozen.metadata)
+            # Void-record copy preserves byte-exact structured padding too.
+            if values.dtype.itemsize:
+                record_dtype = np.dtype(f'V{values.dtype.itemsize}')
+                np.copyto(ref.view(record_dtype), values.view(record_dtype))
+            else:
+                np.copyto(ref, values)
+            ref.setflags(write=frozen.metadata[0])
             return ref
         except (TypeError, ValueError, RuntimeError):
-            # If an adversarial predicate irreversibly resized an array view,
-            # restore the engine's values even when alias recovery is impossible.
-            return values.copy()
+            # Identity/alias restoration is impossible after some destructive
+            # metadata edits. Restore engine-owned values and refusal instead.
+            restored = np.empty_like(values, order='K')
+            if values.dtype.itemsize:
+                record_dtype = np.dtype(f'V{values.dtype.itemsize}')
+                np.copyto(restored.view(record_dtype), values.view(record_dtype))
+            else:
+                np.copyto(restored, values)
+            restored.setflags(write=frozen.metadata[0])
+            return restored
     if kind == 'list':
         ref[:] = [_restore(item) for item in frozen.content]
         return ref
     if kind == 'tuple':
-        return tuple(_restore(item) for item in frozen.content)
+        # Preserve the original immutable tuple and external aliases whenever
+        # its mutable children can be repaired in place. If a child had to be
+        # rebound after unrecoverable metadata damage, create a replacement
+        # tuple rather than leaving an incorrect child in engine-owned state.
+        repaired = tuple(_restore(item) for item in frozen.content)
+        return ref if all(a is b for a, b in zip(repaired, ref)) else repaired
     if kind == 'dict':
         entries = [(key, _restore(item)) for key, item in frozen.content]
         ref.clear()

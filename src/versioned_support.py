@@ -88,6 +88,19 @@ class VersionedQuorumGate(MultiAccessGating):
                 raise
             self.accepted_revision = revision
 
+    def _record_execution_refusal(self):
+        """Record a rejected source revision while the effect window is held.
+
+        Also covers argument, snapshot, transaction and numeric failures that
+        occur *after* quorum validation, not just support withdrawal.
+        Callers must hold the same source lock as the effect publication.
+        This is cooperative software freshness, not external authentication.
+        """
+        source = self._phi_required_source
+        with source._lock:
+            self.execution_locked = True
+            self.rejected_revision = source._revision
+
     def trigger_reopen(self):
         """Allow recovery only after a newer all-positive published observation."""
         source = self._phi_required_source
