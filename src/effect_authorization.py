@@ -74,6 +74,8 @@ def attach_gate_to_engine(engine, gate, support):
         raise TypeError('gate must be a MultiAccessGating')
     if not isinstance(support, SynchronizedSupport):
         raise TypeError('support must be a SynchronizedSupport')
+    if getattr(gate, '_phi_required_source', support) is not support:
+        raise ValueError('Versioned gate must use its bound support source')
     if getattr(engine, '_phi_effect_binding', None) is not None:
         raise RuntimeError('An effect gate is already attached')
     bound_owner = getattr(gate, '_phi_effect_owner', None)
