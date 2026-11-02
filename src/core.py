@@ -24,14 +24,14 @@ class PhiSubstrateEngine:
         ])
         self.R = np.zeros(n_nodes)
 
-    def attach_gate(self, gate, support):
+    def attach_gate(self, gate, support, *, sealed=False):
         """Opt in to serialized support checks on public PHI effect paths.
 
         Attach only a MultiAccessGating plus SynchronizedSupport; the same
         provider must publish all cooperative support withdrawals. REOPEN
         remains the caller's explicit responsibility after refusal.
         """
-        attach_gate_to_engine(self, gate, support)
+        attach_gate_to_engine(self, gate, support, sealed=sealed)
 
     def compute_coupling(self):
         diff = self.pos[np.newaxis, :, :] - self.pos[:, np.newaxis, :]
